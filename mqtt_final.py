@@ -138,7 +138,7 @@ def subscribe(client: mqtt_client, strip):
     client.on_message = on_message
 
 # Define functions which animate LEDs in various ways.  
-def run():
+async def run_video():
     picam2 = Picamera2()
     picam2.configure(picam2.create_preview_configuration(main={"format": 'XRGB8888', "size": (640, 480)}))
     picam2.start()
@@ -148,27 +148,36 @@ def run():
         img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         img = cv2.flip(img, 0)
         
-        #Below provides a huge amount of controll. the 0.45 number is the threshold number, the 0.2 number is the nms number)
+        #Below provides a huge amount of control. the 0.45 number is the threshold number, the 0.2 number is the nms number)
         result, objectInfo = getObjects(img,0.35,0.4, objects = ['car', 'bus', 'truck', 'motorcycle', 'bicycle', 'person'])
         #print(objectInfo)
         cv2.imshow("Output",img)
         
         #print(info[1] for info in objectInfo)
             
-        k = cv2.waitKey(200)
+        k = cv2.waitKey(1)
         if k == 27:    # Esc key to stop
             # EXIT
             picam2.stop()
             cv2.destroyAllWindows()
             break
-    #Below is the never ending loop that determines what will happen when an object is identified.    
-                     
-if __name__ == '__main__':
-    run()
-    strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
-    strip.begin()
+        await asyncio.sleep(0)  # Yield control back to the event loop
+    
+async def run_mqtt(strip):
     client = connect_mqtt()
     subscribe(client, strip)
-    client.loop_forever()
+    client.loop_start()  # Use loop_start for non-blocking call
+    while True:
+        await asyncio.sleep(1)  # Keep the MQTT loop running in the background
 
+async def main():
+    strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
+    strip.begin()
+    
+    await asyncio.gather(
+        run_video(),
+        run_mqtt(strip)
+    )
 
+if __name__ == '__main__':
+    asyncio.run(main())
