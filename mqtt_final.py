@@ -24,6 +24,7 @@ topic = "safecycle"  #INPUT TOPIC NAME
 
 users  = []
 users.append(os.getlogin())
+boxArea = 0
 
 #This is to pull the information about what each object is called
 classNames = []
@@ -58,48 +59,12 @@ def lightsOn(strip, color):
         strip.setPixelColor(i, color)
         strip.show()
 
-
 def colorWipeL(strip, color, wait_ms=50):
     """Wipe color across display a pixel at a time."""
     for i in range(strip.numPixels())[::-1]:
         strip.setPixelColor(i, color)
         strip.show()
         time.sleep(wait_ms/1000.0)
-        
-def getObjects(img, thres, nms, draw=True, objects=[]):
-    classIds, confs, bbox = net.detect(img, confThreshold=thres, nmsThreshold=nms)
-    
-    if len(objects) == 0: 
-        objects = classNames
-    
-    objectInfo = []
-    
-    if len(classIds) != 0:
-        for classId, confidence, box in zip(classIds.flatten(), confs.flatten(), bbox):
-            className = classNames[classId - 1]
-            if className in objects: 
-                objectInfo.append([box, className])
-                print(className)
-                
-                # Calculate the area of the bounding box
-                x, y, w, h = box
-                
-                print(f"Bounding Box Area: {w}")
-                print(className)
-
-                
-                if w >= 250:
-                    print("You're too close")
-
-                if draw:
-                    cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
-                    cv2.putText(img, classNames[classId - 1].upper(), (x + 10, y + 30),
-                                cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
-                    cv2.putText(img, str(round(confidence * 100, 2)), (x + 200, y + 30),
-                                cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
-    
-    return img, objectInfo
-
 
 def connect_mqtt() -> mqtt_client:
     def on_connect(client, userdata, flags, rc):
@@ -134,11 +99,56 @@ def subscribe(client: mqtt_client, strip):
                 colorWipeR(strip, Color(255, 255, 255))  # Red wipe
                 time.sleep(0.01)
                 colorWipeR(strip, Color(0, 0, 0))
+        else:
+            lightsOn(strip, Color(0, 0, 0))
+             
     client.subscribe(topic)
     client.on_message = on_message
+    
+def publish(client,command):
+    result = client.publish(topic, payload=command,qos=0,retain=False)
+    # result: [0, 1]
+    status = result[0]
+    if status == 0:
+        print(f"Send `{command}` to topic `{topic}`")
+    else:
+        print(f"Failed to send message to topic {topic}")
+        
+def getObjects(img, thres, nms, client, draw=True, objects=[]):
+    classIds, confs, bbox = net.detect(img, confThreshold=thres, nmsThreshold=nms)
+    
+    if len(objects) == 0: 
+        objects = classNames
+    
+    objectInfo = []
+    
+    if len(classIds) != 0:
+        for classId, confidence, box in zip(classIds.flatten(), confs.flatten(), bbox):
+            className = classNames[classId - 1]
+            if className in objects: 
+                objectInfo.append([box, className])
+                
+                # Calculate the area of the bounding box
+                x, y, w, h = box
+                
+                if(w >= 250 and className == 'person'):
+                    publish(client, "person")
+                    print(f"You're too close")
+                elif(w >= 250 and className == 'car'):
+                    publish(client, "car")
+                    print(f"You're too close")
+                
+                if draw:
+                    cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
+                    cv2.putText(img, classNames[classId - 1].upper(), (x + 10, y + 30),
+                                cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
+                    cv2.putText(img, str(round(confidence * 100, 2)), (x + 200, y + 30),
+                                cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
+    
+    return img, objectInfo
 
 # Define functions which animate LEDs in various ways.  
-def run():
+async def run_video():
     picam2 = Picamera2()
     picam2.configure(picam2.create_preview_configuration(main={"format": 'XRGB8888', "size": (640, 480)}))
     picam2.start()
@@ -148,27 +158,34 @@ def run():
         img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         img = cv2.flip(img, 0)
         
-        #Below provides a huge amount of controll. the 0.45 number is the threshold number, the 0.2 number is the nms number)
-        result, objectInfo = getObjects(img,0.35,0.4, objects = ['car', 'bus', 'truck', 'motorcycle', 'bicycle', 'person'])
-        #print(objectInfo)
+        result, objectInfo = getObjects(img,0.55,0.4, connect_mqtt(), objects = ['car', 'bus', 'truck', 'motorcycle', 'bicycle', 'person'])
+    
         cv2.imshow("Output",img)
-        
-        #print(info[1] for info in objectInfo)
             
-        k = cv2.waitKey(200)
+        k = cv2.waitKey(1)
         if k == 27:    # Esc key to stop
             # EXIT
             picam2.stop()
             cv2.destroyAllWindows()
             break
-    #Below is the never ending loop that determines what will happen when an object is identified.    
-                     
-if __name__ == '__main__':
-    run()
-    strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
-    strip.begin()
+        await asyncio.sleep(0)  # Yield control back to the event loop
+    
+async def run_mqtt(strip):
+    global client
     client = connect_mqtt()
     subscribe(client, strip)
-    client.loop_forever()
+    client.loop_start()  # Use loop_start for non-blocking call
+    while True:
+        await asyncio.sleep(1)  # Keep the MQTT loop running in the background
 
+async def main():
+    strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
+    strip.begin()
+    
+    await asyncio.gather(
+        run_video(),
+        run_mqtt(strip)
+    )
 
+if __name__ == '__main__':
+    asyncio.run(main())
