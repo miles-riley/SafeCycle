@@ -28,12 +28,12 @@ boxArea = 0
 
 #This is to pull the information about what each object is called
 classNames = []
-classFile = "/home/" + users[0] + "/Desktop/Object_Detection_Files/coco.names"
+classFile = "/home/safecycle/Desktop/Object_Detection_Files/coco.names"
 with open(classFile,"rt") as f:
     classNames = f.read().rstrip("\n").split("\n")
     
-configPath = "/home/"+ users[0] + "/Desktop/Object_Detection_Files/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
-weightsPath = "/home/"+ users[0] + "/Desktop/Object_Detection_Files/frozen_inference_graph.pb"
+configPath = "/home/safecycle/Desktop/Object_Detection_Files/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
+weightsPath = "/home/safecycle/Desktop/Object_Detection_Files/frozen_inference_graph.pb"
 
 net = cv2.dnn_DetectionModel(weightsPath,configPath)
 net.setInputSize(320,320)
@@ -131,12 +131,9 @@ def getObjects(img, thres, nms, client, draw=True, objects=[]):
                 # Calculate the area of the bounding box
                 x, y, w, h = box
                 
-                if(w >= 250 and className == 'person'):
-                    publish(client, "person")
-                    print(f"You're too close")
-                elif(w >= 250 and className == 'car'):
-                    publish(client, "car")
-                    print(f"You're too close")
+                if(w >= 250 and className == 'car'):
+                    publish(client, "carback")
+                    
                 
                 if draw:
                     cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
@@ -148,7 +145,7 @@ def getObjects(img, thres, nms, client, draw=True, objects=[]):
     return img, objectInfo
 
 # Define functions which animate LEDs in various ways.  
-async def run_video():
+async def run_video(client):
     picam2 = Picamera2()
     picam2.configure(picam2.create_preview_configuration(main={"format": 'XRGB8888', "size": (640, 480)}))
     picam2.start()
@@ -158,7 +155,7 @@ async def run_video():
         img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         img = cv2.flip(img, 0)
         
-        result, objectInfo = getObjects(img,0.55,0.4, connect_mqtt(), objects = ['car', 'bus', 'truck', 'motorcycle', 'bicycle', 'person'])
+        result, objectInfo = getObjects(img,0.55,0.4, client, objects = ['car', 'bus', 'truck', 'motorcycle', 'bicycle', 'person'])
     
         cv2.imshow("Output",img)
             
@@ -170,9 +167,7 @@ async def run_video():
             break
         await asyncio.sleep(0)  # Yield control back to the event loop
     
-async def run_mqtt(strip):
-    global client
-    client = connect_mqtt()
+async def run_mqtt(strip, client):
     subscribe(client, strip)
     client.loop_start()  # Use loop_start for non-blocking call
     while True:
@@ -182,9 +177,11 @@ async def main():
     strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
     strip.begin()
     
+    client = connect_mqtt()
+    
     await asyncio.gather(
-        run_video(),
-        run_mqtt(strip)
+        run_mqtt(strip, client),
+        run_video(client)
     )
 
 if __name__ == '__main__':
