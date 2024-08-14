@@ -9,6 +9,7 @@ import os
 import asyncio
 from picamera2 import *
 
+#variable to check for a monitor
 DISPLAY_AVAILABLE = os.environ.get('DISPLAY', None) is not None
 
 # LED strip configuration:
@@ -49,6 +50,7 @@ client_id = f'publish-{random.randint(0, 1000)}'
 username = '' #INPUT USERNAME
 password = '' #INPUT PASSWORD
 
+#below are functions for each mode of the LED strip
 def colorWipeR(strip, color, wait_ms=50):
     """Wipe color across display a pixel at a time."""
     for i in range(strip.numPixels()):
@@ -132,11 +134,12 @@ def getObjects(img, thres, nms, client, draw=True, objects=[]):
                 
                 # Calculate the area of the bounding box
                 x, y, w, h = box
-                
+
+                #vehicle detection for cars only
                 if(w >= 250 and className == 'car'):
                     publish(client, "carback")
                     
-                
+                #creates the bounding boxes using 
                 if draw:
                     cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
                     cv2.putText(img, classNames[classId - 1].upper(), (x + 10, y + 30),
@@ -157,9 +160,11 @@ async def run_video(client):
         img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         img = cv2.flip(img, 0)
         
-        #Below provides a huge amount of control. the 0.45 number is the threshold number, the 0.2 number is the nms number)
+        #Below provides a huge amount of control. the 0.55 number is the threshold number, the 0.2 number is the nms number)
         result, objectInfo = getObjects(img, 0.55, 0.2, client, objects = ['car', 'bus', 'truck', 'motorcycle', 'bicycle', 'person'])
-            
+        
+        #checks to see if a display is connected. If so, it will attempt to bring up the output preview. Otherwise, the camera will still run without a monitor
+        #THIS IS NEEDED IN ORDER FOR THE SCRIPT TO RUN ON STARTUP
         if DISPLAY_AVAILABLE:
             cv2.imshow("Output", img)
             k = cv2.waitKey(1)
@@ -176,6 +181,7 @@ async def run_mqtt(strip, client):
         await asyncio.sleep(1)  # Keep the MQTT loop running in the background
 
 async def main():
+    #initializes ws2812 led strip
     strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
     strip.begin()
     
