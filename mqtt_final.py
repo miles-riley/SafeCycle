@@ -136,8 +136,9 @@ def getObjects(img, thres, nms, client, draw=True, objects=[]):
                 x, y, w, h = box
 
                 #vehicle detection for cars only
-                if(w >= 250 and className == 'car'):
-                    publish(client, "carback")
+                if(className == 'car'):
+                    publish(client, f"{x},{w}")
+                    print(f"{x},{w}")
                     
                 #creates the bounding boxes using 
                 if draw:
@@ -184,7 +185,6 @@ async def main():
     #initializes ws2812 led strip
     strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
     strip.begin()
-    
     client = connect_mqtt()
     
     await asyncio.gather(
