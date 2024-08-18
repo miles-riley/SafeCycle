@@ -13,7 +13,7 @@ DISPLAY_AVAILABLE = os.environ.get('DISPLAY', None) is not None
 
 # LED strip configuration:
 LED_COUNT      = 10      # Number of LED pixels.
-LED_PIN        = 10      # GPIO pin connected to the pixels (18 uses PWM!).
+LED_PIN        = 10      # GPIO pin connected to the pixels (10 is an SPI Pin, which allows you to run it through thonny)
 LED_FREQ_HZ    = 800000  # LED signal frequency in hertz (usually 800khz)
 LED_DMA        = 10      # DMA channel to use for generating a signal (try 10)
 LED_BRIGHTNESS = 255     # Set to 0 for darkest and 255 for brightest
@@ -136,6 +136,7 @@ def getObjects(img, thres, nms, client, draw=True, objects=[]):
 
                 #vehicle detection for cars only
                 if(className == 'car'):
+                    # Sends the x coordinate and width of the bounding box to the client phone
                     publish(client, f"{x},{w}")
                     print(f"{x},{w}")
                     
@@ -149,7 +150,7 @@ def getObjects(img, thres, nms, client, draw=True, objects=[]):
     
     return img, objectInfo
 
-# Define functions which animate LEDs in various ways.  
+# asynchronous function for object detection through picam
 async def run_video(client):
     picam2 = Picamera2()
     picam2.configure(picam2.create_preview_configuration(main={"format": 'XRGB8888', "size": (640, 480)}))
@@ -173,7 +174,8 @@ async def run_video(client):
                 cv2.destroyAllWindows()
                 break
         await asyncio.sleep(0)  # Yield control back to the event loop
-    
+
+#asynchronous function for mqtt
 async def run_mqtt(strip, client):
     subscribe(client, strip)
     client.loop_start()  # Use loop_start for non-blocking call
@@ -185,6 +187,7 @@ async def main():
     strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
     strip.begin()
     client = connect_mqtt()
+
     
     await asyncio.gather(
         run_mqtt(strip, client),
