@@ -2,7 +2,6 @@ import random
 import time
 from paho.mqtt import client as mqtt_client
 import json
-import time
 from rpi_ws281x import *
 import cv2
 import os
