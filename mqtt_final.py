@@ -24,10 +24,6 @@ broker = 'localhost' #INPUT BROKER NAME
 port = 1883
 topic = "safecycle"  #INPUT TOPIC NAME
 
-users  = []
-users.append(os.getlogin())
-boxArea = 0
-
 #This is to pull the information about what each object is called
 classNames = []
 classFile = "/home/safecycle/Desktop/Object_Detection_Files/coco.names"
